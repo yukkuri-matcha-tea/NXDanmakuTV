@@ -76,10 +76,15 @@ public final class OverlayService extends Service implements NxJikkyoClient.List
                 return;
             }
             String id = intent.getStringExtra(FollowContract.EXTRA_CHANNEL_ID);
+            String stationName = intent.getStringExtra(FollowContract.EXTRA_CHANNEL_NAME);
             if (intent.getBooleanExtra(FollowContract.EXTRA_TV_VISIBLE, false)) {
                 setTvVisible(true);
             }
-            switchChannel(id, "自動追従");
+            if (id == null || id.isBlank()) {
+                suspendUnsupportedStation(stationName);
+            } else {
+                switchChannel(id, "自動追従");
+            }
         }
     };
 
@@ -246,6 +251,16 @@ public final class OverlayService extends Service implements NxJikkyoClient.List
         danmakuView.setStatus(source + " / 接続中");
         danmakuView.addEvent("チャンネル変更 " + channel.name() + " (" + channel.id() + ")");
         client.connect(channel.id());
+    }
+
+    private void suspendUnsupportedStation(String stationName) {
+        String label = stationName == null || stationName.isBlank() ? "この放送局" : stationName;
+        activeChannelId = "";
+        client.stop();
+        danmakuView.setChannel(label);
+        danmakuView.setStatus("実況チャンネルを特定できません");
+        danmakuView.addEvent(label + " は自動対応先なし");
+        updateNotification(label + " / 自動対応先なし");
     }
 
     private void setTvVisible(boolean visible) {

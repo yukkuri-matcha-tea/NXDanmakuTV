@@ -69,6 +69,9 @@ public final class MainActivity extends Activity {
         registerDownloadReceiver();
         setContentView(buildContent());
         requestNotificationPermissionIfNeeded();
+        if (!preferences.hasRegionSelection()) {
+            getWindow().getDecorView().post(this::showInitialRegionConfirmation);
+        }
     }
 
     @Override
@@ -206,6 +209,32 @@ public final class MainActivity extends Activity {
         controlCard.addView(permissionChips, marginTop(14));
         root.addView(controlCard, marginTop(12));
 
+        RegionChannelCatalog.Region selectedRegion =
+                RegionChannelCatalog.byId(preferences.regionId());
+        LinearLayout regionCard = card(0xFF17232A, 20, 20);
+        regionCard.addView(overline("放送地域"));
+        LinearLayout regionRow = new LinearLayout(this);
+        regionRow.setOrientation(LinearLayout.HORIZONTAL);
+        regionRow.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout regionLabels = new LinearLayout(this);
+        regionLabels.setOrientation(LinearLayout.VERTICAL);
+        TextView regionName = text(
+                selectedRegion == null ? "都道府県を選択してください" : selectedRegion.name(),
+                21, Color.WHITE);
+        regionName.setTypeface(null, android.graphics.Typeface.BOLD);
+        regionLabels.addView(regionName);
+        regionLabels.addView(text(
+                selectedRegion == null
+                        ? "数字キーとチャンネル上下の追従に必要です"
+                        : selectedRegion.stations().size() + "局のリモコン番号へ自動追従",
+                14, getColor(R.color.text_secondary)), marginTop(3));
+        regionRow.addView(regionLabels, new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        regionRow.addView(button(selectedRegion == null ? "選択する" : "変更",
+                view -> showRegionPicker(false)), leftMargin(16));
+        regionCard.addView(regionRow, marginTop(8));
+        root.addView(regionCard, marginTop(12));
+
         LinearLayout actions = new LinearLayout(this);
         actions.setOrientation(LinearLayout.HORIZONTAL);
         actions.setGravity(Gravity.START);
@@ -309,15 +338,18 @@ public final class MainActivity extends Activity {
         GridLayout grid = new GridLayout(this);
         grid.setColumnCount(3);
         grid.setUseDefaultMargins(true);
-        for (ChannelCatalog.Channel channel : ChannelCatalog.all()) {
-            Button channelButton = button(
-                    channel.remoteNumber() + "  " + channel.name(),
-                    view -> manualChannel(channel.id()));
-            GridLayout.LayoutParams params = new GridLayout.LayoutParams();
-            params.width = 0;
-            params.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
-            params.setGravity(Gravity.FILL_HORIZONTAL);
-            grid.addView(channelButton, params);
+        if (selectedRegion != null) {
+            for (RegionChannelCatalog.Station station : selectedRegion.stations()) {
+                if (!station.supported()) continue;
+                Button channelButton = button(
+                        station.remoteNumber() + "  " + station.name(),
+                        view -> manualChannel(station.channelId()));
+                GridLayout.LayoutParams params = new GridLayout.LayoutParams();
+                params.width = 0;
+                params.columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f);
+                params.setGravity(Gravity.FILL_HORIZONTAL);
+                grid.addView(channelButton, params);
+            }
         }
         LinearLayout diagnosticCard = card();
         diagnosticCard.addView(overline("手動判定テスト"));
@@ -335,6 +367,10 @@ public final class MainActivity extends Activity {
     }
 
     private void startOverlay(boolean returnToTv) {
+        if (!preferences.hasRegionSelection()) {
+            showRegionPicker(true);
+            return;
+        }
         if (!Settings.canDrawOverlays(this)) {
             openOverlaySettings();
             return;
@@ -393,6 +429,49 @@ public final class MainActivity extends Activity {
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(home);
         }
+    }
+
+    private void showInitialRegionConfirmation() {
+        if (isFinishing() || preferences.hasRegionSelection()) return;
+        new AlertDialog.Builder(this)
+                .setTitle("放送地域を設定します")
+                .setMessage("リモコン番号は地域によって異なります。お住まいの都道府県を選ぶと、数字キーとチャンネル上下へ正しく追従します。あとから設定画面で変更できます。")
+                .setPositiveButton("都道府県を選ぶ", (dialog, which) -> showRegionPicker(true))
+                .setCancelable(false)
+                .show();
+    }
+
+    private void showRegionPicker(boolean required) {
+        List<RegionChannelCatalog.Region> regions = RegionChannelCatalog.all();
+        String[] names = new String[regions.size()];
+        int current = -1;
+        for (int i = 0; i < regions.size(); i++) {
+            names[i] = regions.get(i).name();
+            if (regions.get(i).id().equals(preferences.regionId())) current = i;
+        }
+        int[] selected = {current};
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("都道府県を選択")
+                .setSingleChoiceItems(names, current, (choiceDialog, which) -> selected[0] = which)
+                .setPositiveButton("保存", null)
+                .setNegativeButton(required ? null : "キャンセル", null)
+                .setCancelable(!required)
+                .create();
+        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+                .setOnClickListener(view -> {
+                    if (selected[0] < 0) {
+                        Toast.makeText(this, "都道府県を1つ選んでください", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    RegionChannelCatalog.Region region = regions.get(selected[0]);
+                    preferences.setRegionId(region.id());
+                    notifySettingsChanged();
+                    Toast.makeText(this, "放送地域を" + region.name() + "に設定しました",
+                            Toast.LENGTH_SHORT).show();
+                    dialog.dismiss();
+                    recreate();
+                }));
+        dialog.show();
     }
 
     private void checkForUpdates(boolean interactive) {

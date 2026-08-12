@@ -25,6 +25,9 @@ public final class ChannelFollowAccessibilityService extends AccessibilityServic
     private final StringBuilder digitBuffer = new StringBuilder();
     private AppPreferences preferences;
     private String currentChannelId;
+    private int currentRemoteNumber = -1;
+    private String currentDetectionKey;
+    private String activeRegionId;
     private String tvPackage;
     private String foregroundPackage;
     private Boolean lastPublishedVisibility;
@@ -32,7 +35,7 @@ public final class ChannelFollowAccessibilityService extends AccessibilityServic
     private long blockingCandidateSince;
     private long lastDetectionAt;
 
-    private final Runnable clearDigits = () -> digitBuffer.setLength(0);
+    private final Runnable commitDigits = this::commitDigitBuffer;
     private final Runnable scanWindow = this::scanActiveWindow;
     private final Runnable evaluateWindows = this::evaluateWindowVisibility;
 
@@ -40,6 +43,8 @@ public final class ChannelFollowAccessibilityService extends AccessibilityServic
     protected void onServiceConnected() {
         preferences = new AppPreferences(this);
         currentChannelId = preferences.lastChannel();
+        currentRemoteNumber = preferences.lastRemoteNumber();
+        activeRegionId = preferences.regionId();
         tvPackage = preferences.tvPackage();
     }
 
@@ -109,13 +114,17 @@ public final class ChannelFollowAccessibilityService extends AccessibilityServic
         int digit = digitForKeyCode(keyCode);
         if (digit >= 0) {
             digitBuffer.append(digit);
-            handler.removeCallbacks(clearDigits);
-            handler.postDelayed(clearDigits, 1200L);
+            handler.removeCallbacks(commitDigits);
             try {
                 int number = Integer.parseInt(digitBuffer.toString());
-                ChannelCatalog.Channel channel = ChannelCatalog.byRemoteNumber(number);
-                if (channel != null) {
-                    publish(channel, "remote-number");
+                RegionChannelCatalog.Region region = selectedRegion();
+                RegionChannelCatalog.Station station = region == null
+                        ? null : region.byRemoteNumber(number);
+                if (station != null && !hasLongerRemotePrefix(region, digitBuffer.toString())) {
+                    publish(station, "remote-number");
+                    digitBuffer.setLength(0);
+                } else {
+                    handler.postDelayed(commitDigits, 650L);
                 }
             } catch (NumberFormatException ignored) {
                 digitBuffer.setLength(0);
@@ -126,7 +135,13 @@ public final class ChannelFollowAccessibilityService extends AccessibilityServic
 
         if (keyCode == KeyEvent.KEYCODE_CHANNEL_UP || keyCode == KeyEvent.KEYCODE_CHANNEL_DOWN) {
             int direction = keyCode == KeyEvent.KEYCODE_CHANNEL_UP ? 1 : -1;
-            ChannelCatalog.Channel adjacent = ChannelCatalog.adjacent(currentChannelId, direction);
+            RegionChannelCatalog.Region region = selectedRegion();
+            if (currentRemoteNumber < 0 && region != null) {
+                RegionChannelCatalog.Station current = region.stationForChannel(currentChannelId);
+                if (current != null) currentRemoteNumber = current.remoteNumber();
+            }
+            RegionChannelCatalog.Station adjacent = region == null
+                    ? null : region.adjacent(currentRemoteNumber, direction);
             if (adjacent != null) {
                 publish(adjacent, "remote-channel-step");
             }
@@ -138,6 +153,31 @@ public final class ChannelFollowAccessibilityService extends AccessibilityServic
         }
 
         // Observation only: always allow the TV application to receive the key.
+        return false;
+    }
+
+    private void commitDigitBuffer() {
+        if (digitBuffer.length() == 0) return;
+        try {
+            int number = Integer.parseInt(digitBuffer.toString());
+            RegionChannelCatalog.Region region = selectedRegion();
+            RegionChannelCatalog.Station station = region == null
+                    ? null : region.byRemoteNumber(number);
+            if (station != null) publish(station, "remote-number");
+        } catch (NumberFormatException ignored) {
+            // Ignore malformed or overlong remote input and wait for the next key sequence.
+        } finally {
+            digitBuffer.setLength(0);
+        }
+    }
+
+    private static boolean hasLongerRemotePrefix(
+            RegionChannelCatalog.Region region, String prefix) {
+        if (region == null) return false;
+        for (RegionChannelCatalog.Station station : region.stations()) {
+            String candidate = Integer.toString(station.remoteNumber());
+            if (candidate.length() > prefix.length() && candidate.startsWith(prefix)) return true;
+        }
         return false;
     }
 
@@ -260,18 +300,19 @@ public final class ChannelFollowAccessibilityService extends AccessibilityServic
     }
 
     private void detectAndPublish(String text, String source, String sourcePackage) {
-        ChannelCatalog.Channel channel = ChannelCatalog.detect(text);
-        if (channel != null) {
-            publish(channel, source, sourcePackage);
+        RegionChannelCatalog.Region region = selectedRegion();
+        RegionChannelCatalog.Station station = region == null ? null : region.detect(text);
+        if (station != null) {
+            publish(station, source, sourcePackage);
         }
     }
 
-    private void publish(ChannelCatalog.Channel channel, String source) {
-        publish(channel, source, foregroundPackage);
+    private void publish(RegionChannelCatalog.Station station, String source) {
+        publish(station, source, foregroundPackage);
     }
 
     private void publish(
-            ChannelCatalog.Channel channel,
+            RegionChannelCatalog.Station station,
             String source,
             String sourcePackage
     ) {
@@ -289,17 +330,22 @@ public final class ChannelFollowAccessibilityService extends AccessibilityServic
         }
 
         long now = System.currentTimeMillis();
-        if (channel.id().equals(currentChannelId) && now - lastDetectionAt < 2500L) {
+        String detectionKey = station.remoteNumber() + ":" + station.name();
+        if (detectionKey.equals(currentDetectionKey) && now - lastDetectionAt < 2500L) {
             return;
         }
-        currentChannelId = channel.id();
+        currentChannelId = station.channelId();
+        currentRemoteNumber = station.remoteNumber();
+        currentDetectionKey = detectionKey;
         lastDetectionAt = now;
-        preferences.setLastChannel(channel.id());
+        preferences.setLastRemoteNumber(station.remoteNumber());
+        if (station.supported()) preferences.setLastChannel(station.channelId());
 
         Intent intent = new Intent(FollowContract.ACTION_CHANNEL_DETECTED)
                 .setPackage(getPackageName())
-                .putExtra(FollowContract.EXTRA_CHANNEL_ID, channel.id())
-                .putExtra(FollowContract.EXTRA_CHANNEL_NAME, channel.name())
+                .putExtra(FollowContract.EXTRA_CHANNEL_ID, station.channelId())
+                .putExtra(FollowContract.EXTRA_CHANNEL_NAME, station.name())
+                .putExtra(FollowContract.EXTRA_REMOTE_NUMBER, station.remoteNumber())
                 .putExtra(FollowContract.EXTRA_SOURCE, source)
                 .putExtra(FollowContract.EXTRA_TV_VISIBLE, !blockingUiVisible);
         sendBroadcast(intent);
@@ -378,6 +424,17 @@ public final class ChannelFollowAccessibilityService extends AccessibilityServic
             preferences = new AppPreferences(this);
         }
         return preferences.autoFollow();
+    }
+
+    private RegionChannelCatalog.Region selectedRegion() {
+        if (preferences == null) preferences = new AppPreferences(this);
+        String regionId = preferences.regionId();
+        if (activeRegionId == null || !activeRegionId.equals(regionId)) {
+            activeRegionId = regionId;
+            currentRemoteNumber = preferences.lastRemoteNumber();
+            currentDetectionKey = null;
+        }
+        return RegionChannelCatalog.byId(regionId);
     }
 
     private static int digitForKeyCode(int keyCode) {

@@ -15,6 +15,8 @@ public final class AppPreferences {
     private static final String FILE = "nx_danmaku_tv";
     private static final String AUTO_FOLLOW = "auto_follow";
     private static final String LAST_CHANNEL = "last_channel";
+    private static final String LAST_REMOTE_NUMBER = "last_remote_number";
+    private static final String REGION_ID = "region_id";
     private static final String COMMENT_DELAY_MS = "comment_delay_ms";
     private static final String TEXT_SCALE = "text_scale";
     private static final String SHOW_STATUS_BADGE = "show_status_badge";
@@ -48,6 +50,29 @@ public final class AppPreferences {
 
     public void setLastChannel(String channelId) {
         preferences.edit().putString(LAST_CHANNEL, channelId).apply();
+    }
+
+    public int lastRemoteNumber() {
+        return preferences.getInt(LAST_REMOTE_NUMBER, -1);
+    }
+
+    public void setLastRemoteNumber(int remoteNumber) {
+        preferences.edit().putInt(LAST_REMOTE_NUMBER, remoteNumber).apply();
+    }
+
+    public String regionId() {
+        return preferences.getString(REGION_ID, "");
+    }
+
+    public boolean hasRegionSelection() {
+        return RegionChannelCatalog.byId(regionId()) != null;
+    }
+
+    public void setRegionId(String regionId) {
+        preferences.edit()
+                .putString(REGION_ID, regionId == null ? "" : regionId)
+                .putInt(LAST_REMOTE_NUMBER, -1)
+                .apply();
     }
 
     public long commentDelayMs() {

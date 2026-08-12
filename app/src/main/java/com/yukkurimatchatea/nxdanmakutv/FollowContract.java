@@ -11,6 +11,7 @@ public final class FollowContract {
             "com.yukkurimatchatea.nxdanmakutv.action.DIAGNOSTIC_EVENT";
     public static final String EXTRA_CHANNEL_ID = "channel_id";
     public static final String EXTRA_CHANNEL_NAME = "channel_name";
+    public static final String EXTRA_REMOTE_NUMBER = "remote_number";
     public static final String EXTRA_SOURCE = "source";
     public static final String EXTRA_VISIBLE = "visible";
     public static final String EXTRA_TV_VISIBLE = "tv_visible";
