@@ -100,6 +100,12 @@ public final class MainActivity extends Activity {
         super.onDestroy();
     }
 
+    private void rebuildContent() {
+        if (isFinishing() || isDestroyed()) return;
+        setContentView(buildContent());
+        refreshStatus();
+    }
+
     private View buildContent() {
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
@@ -326,7 +332,7 @@ public final class MainActivity extends Activity {
         Button reset = button("表示設定を初期値に戻す", view -> {
             preferences.resetDisplaySettings();
             notifySettingsChanged();
-            recreate();
+            view.post(this::rebuildContent);
         });
         root.addView(reset, marginTop(12));
 
@@ -436,7 +442,8 @@ public final class MainActivity extends Activity {
         new AlertDialog.Builder(this)
                 .setTitle("放送地域を設定します")
                 .setMessage("リモコン番号は地域によって異なります。お住まいの都道府県を選ぶと、数字キーとチャンネル上下へ正しく追従します。あとから設定画面で変更できます。")
-                .setPositiveButton("都道府県を選ぶ", (dialog, which) -> showRegionPicker(true))
+                .setPositiveButton("都道府県を選ぶ", (dialog, which) ->
+                        getWindow().getDecorView().post(() -> showRegionPicker(true)))
                 .setCancelable(false)
                 .show();
     }
@@ -469,7 +476,7 @@ public final class MainActivity extends Activity {
                     Toast.makeText(this, "放送地域を" + region.name() + "に設定しました",
                             Toast.LENGTH_SHORT).show();
                     dialog.dismiss();
-                    recreate();
+                    getWindow().getDecorView().post(this::rebuildContent);
                 }));
         dialog.show();
     }

@@ -125,12 +125,13 @@ public final class OverlayService extends Service implements NxJikkyoClient.List
             setTvVisible(true);
             switchChannel(id, "手動テスト");
         } else if (preferences.autoFollow()) {
-            activeChannelId = null;
-            tvVisible = false;
-            danmakuView.setChannel("");
-            danmakuView.setStatus("チャンネル判定中");
-            danmakuView.setOverlayActive(false);
-            client.stop();
+            if (activeChannelId == null) {
+                tvVisible = false;
+                danmakuView.setChannel("");
+                danmakuView.setStatus("チャンネル判定中");
+                danmakuView.setOverlayActive(false);
+                client.stop();
+            }
         } else {
             setTvVisible(true);
             switchChannel(preferences.lastChannel(), "固定");
@@ -168,8 +169,10 @@ public final class OverlayService extends Service implements NxJikkyoClient.List
         DanmakuView view = danmakuView;
         if (view != null) {
             view.post(() -> {
-                view.setStatus(status);
-                view.addEvent(status);
+                if (view == danmakuView) {
+                    view.setStatus(status);
+                    view.addEvent(status);
+                }
             });
         }
         updateNotification(status);
@@ -180,8 +183,10 @@ public final class OverlayService extends Service implements NxJikkyoClient.List
         DanmakuView view = danmakuView;
         if (view != null) {
             view.post(() -> {
-                view.setConnectedStatus("コメント受信中 " + channelId);
-                view.addEvent("接続完了 " + channelId);
+                if (view == danmakuView) {
+                    view.setConnectedStatus("コメント受信中 " + channelId);
+                    view.addEvent("接続完了 " + channelId);
+                }
             });
         }
         updateNotification("コメント受信中 " + channelId);

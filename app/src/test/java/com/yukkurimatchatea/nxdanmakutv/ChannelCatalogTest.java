@@ -18,7 +18,13 @@ public class ChannelCatalogTest {
     @Test
     public void ignoresUnknownText() {
         assertNull(ChannelCatalog.detect("番組表"));
+        assertNull(ChannelCatalog.detect("NEXT PROGRAM"));
         assertNull(ChannelCatalog.detect(null));
+    }
+
+    @Test
+    public void detectsShortLatinAliasOnlyAsWholeToken() {
+        assertEquals("jk5", ChannelCatalog.detect("テレビ朝日 EX").id());
     }
 
     @Test

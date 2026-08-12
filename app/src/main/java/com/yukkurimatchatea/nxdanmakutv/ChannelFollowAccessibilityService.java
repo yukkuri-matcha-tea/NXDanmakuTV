@@ -30,6 +30,7 @@ public final class ChannelFollowAccessibilityService extends AccessibilityServic
     private String activeRegionId;
     private String tvPackage;
     private String foregroundPackage;
+    private String lastApplicationPackage;
     private Boolean lastPublishedVisibility;
     private boolean blockingUiVisible;
     private long blockingCandidateSince;
@@ -65,6 +66,9 @@ public final class ChannelFollowAccessibilityService extends AccessibilityServic
         String eventPackage = packageName == null ? "" : packageName.toString();
         if (!eventPackage.isEmpty()) {
             foregroundPackage = eventPackage;
+            if (!getPackageName().equals(eventPackage) && !isSystemUi(eventPackage)) {
+                lastApplicationPackage = eventPackage;
+            }
         }
 
         if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
@@ -106,7 +110,10 @@ public final class ChannelFollowAccessibilityService extends AccessibilityServic
     }
 
     private boolean handleKeyEvent(KeyEvent event) {
-        if (!isFollowing() || event == null || event.getAction() != KeyEvent.ACTION_UP) {
+        if (!isFollowing()
+                || event == null
+                || event.getAction() != KeyEvent.ACTION_UP
+                || !isTvKeyContext()) {
             return false;
         }
 
@@ -207,21 +214,25 @@ public final class ChannelFollowAccessibilityService extends AccessibilityServic
         try {
             while (!nodes.isEmpty() && visited++ < MAX_NODES) {
                 AccessibilityNodeInfo node = nodes.removeFirst();
-                if (node.getText() != null) {
-                    visibleText.append(' ').append(node.getText());
-                }
-                if (node.getContentDescription() != null) {
-                    visibleText.append(' ').append(node.getContentDescription());
-                }
-                for (int i = 0; i < node.getChildCount(); i++) {
-                    AccessibilityNodeInfo child = node.getChild(i);
-                    if (child != null) {
-                        nodes.addLast(child);
+                try {
+                    if (node.getText() != null) {
+                        visibleText.append(' ').append(node.getText());
                     }
+                    if (node.getContentDescription() != null) {
+                        visibleText.append(' ').append(node.getContentDescription());
+                    }
+                    for (int i = 0; i < node.getChildCount(); i++) {
+                        AccessibilityNodeInfo child = node.getChild(i);
+                        if (child != null) {
+                            nodes.addLast(child);
+                        }
+                    }
+                } finally {
+                    node.recycle();
                 }
             }
         } finally {
-            root.recycle();
+            recycleNodes(nodes);
         }
         detectAndPublish(visibleText.toString(), "tv-window", rootPackage);
     }
@@ -231,9 +242,7 @@ public final class ChannelFollowAccessibilityService extends AccessibilityServic
             return;
         }
         List<AccessibilityWindowInfo> windows = getWindows();
-        if (windows == null || windows.isEmpty()) {
-            return;
-        }
+        if (windows == null) windows = List.of();
 
         float screenArea = getResources().getDisplayMetrics().widthPixels
                 * (float) getResources().getDisplayMetrics().heightPixels;
@@ -243,38 +252,41 @@ public final class ChannelFollowAccessibilityService extends AccessibilityServic
         Rect bounds = new Rect();
 
         for (AccessibilityWindowInfo window : windows) {
-            AccessibilityNodeInfo root = window.getRoot();
-            String packageName = "";
-            float visibleContentRatio = 0f;
-            if (root != null) {
-                CharSequence value = root.getPackageName();
-                packageName = value == null ? "" : value.toString();
-                visibleContentRatio = visibleContentRatio(root, screenArea);
-                root.recycle();
-            }
+            try {
+                AccessibilityNodeInfo root = window.getRoot();
+                String packageName = "";
+                float visibleContentRatio = 0f;
+                if (root != null) {
+                    CharSequence value = root.getPackageName();
+                    packageName = value == null ? "" : value.toString();
+                    visibleContentRatio = visibleContentRatio(root, screenArea);
+                }
 
-            boolean isTvWindow = tvPackage.equals(packageName);
-            if (isTvWindow) {
-                tvWindowPresent = true;
-            }
+                boolean isTvWindow = tvPackage.equals(packageName);
+                if (isTvWindow) {
+                    tvWindowPresent = true;
+                }
 
-            window.getBoundsInScreen(bounds);
-            float areaRatio = screenArea <= 0f
-                    ? 0f : (bounds.width() * (float) bounds.height()) / screenArea;
-            boolean systemWindow = window.getType() == AccessibilityWindowInfo.TYPE_SYSTEM;
-            boolean focusedWindow = window.isFocused();
+                window.getBoundsInScreen(bounds);
+                float areaRatio = screenArea <= 0f
+                        ? 0f : (bounds.width() * (float) bounds.height()) / screenArea;
+                boolean systemWindow = window.getType() == AccessibilityWindowInfo.TYPE_SYSTEM;
+                boolean focusedWindow = window.isFocused();
 
-            if (WindowVisibilityPolicy.blocksComments(
-                    isTvWindow,
-                    getPackageName().equals(packageName),
-                    systemWindow,
-                    focusedWindow,
-                    areaRatio,
-                    visibleContentRatio)) {
-                blockingWindowPresent = true;
-                blockingReason = packageName.isEmpty()
-                        ? "不明なウィンドウ"
-                        : packageName;
+                if (WindowVisibilityPolicy.blocksComments(
+                        isTvWindow,
+                        getPackageName().equals(packageName),
+                        systemWindow,
+                        focusedWindow,
+                        areaRatio,
+                        visibleContentRatio)) {
+                    blockingWindowPresent = true;
+                    blockingReason = packageName.isEmpty()
+                            ? "不明なウィンドウ"
+                            : packageName;
+                }
+            } finally {
+                window.recycle();
             }
         }
 
@@ -290,7 +302,7 @@ public final class ChannelFollowAccessibilityService extends AccessibilityServic
                 }
                 publishTvVisibility(false);
             }
-        } else if (tvWindowPresent) {
+        } else if (tvWindowPresent || isLikelyTvForeground()) {
             blockingCandidateSince = 0L;
             blockingUiVisible = false;
             publishTvVisibility(true);
@@ -316,10 +328,11 @@ public final class ChannelFollowAccessibilityService extends AccessibilityServic
             String source,
             String sourcePackage
     ) {
-        boolean trustedTvSource = sourcePackage != null
-                && !sourcePackage.isBlank()
-                && !getPackageName().equals(sourcePackage)
-                && !isSystemUi(sourcePackage);
+        boolean trustedTvSource = TvContextPolicy.canLearnTvPackage(
+                tvPackage,
+                sourcePackage,
+                getPackageName().equals(sourcePackage),
+                isSystemUi(sourcePackage));
         if (trustedTvSource) {
             tvPackage = sourcePackage;
             preferences.setTvPackage(sourcePackage);
@@ -379,6 +392,19 @@ public final class ChannelFollowAccessibilityService extends AccessibilityServic
                 || "android".equals(packageName);
     }
 
+    private boolean isTvKeyContext() {
+        return TvContextPolicy.allowsTvRemoteKey(
+                tvPackage, foregroundPackage, blockingUiVisible);
+    }
+
+    private boolean isLikelyTvForeground() {
+        return TvContextPolicy.isLikelyTvForeground(
+                tvPackage,
+                foregroundPackage,
+                lastApplicationPackage,
+                isSystemUi(foregroundPackage));
+    }
+
     private static float visibleContentRatio(AccessibilityNodeInfo root, float screenArea) {
         if (root == null || screenArea <= 0f) {
             return 0f;
@@ -389,34 +415,48 @@ public final class ChannelFollowAccessibilityService extends AccessibilityServic
         Rect nodeBounds = new Rect();
         boolean hasContent = false;
         int visited = 0;
-        while (!nodes.isEmpty() && visited++ < MAX_VISIBILITY_NODES) {
-            AccessibilityNodeInfo node = nodes.removeFirst();
-            // Full-screen transparent SystemUI roots are often focusable/clickable.
-            // Only semantic content counts toward the visible modal footprint.
-            boolean meaningful = node.isVisibleToUser()
-                    && (node.getText() != null
-                    || node.getContentDescription() != null);
-            if (meaningful) {
-                node.getBoundsInScreen(nodeBounds);
-                if (!nodeBounds.isEmpty()) {
-                    if (hasContent) {
-                        contentBounds.union(nodeBounds);
-                    } else {
-                        contentBounds.set(nodeBounds);
-                        hasContent = true;
+        try {
+            while (!nodes.isEmpty() && visited++ < MAX_VISIBILITY_NODES) {
+                AccessibilityNodeInfo node = nodes.removeFirst();
+                try {
+                    // Full-screen transparent SystemUI roots are often focusable/clickable.
+                    // Only semantic content counts toward the visible modal footprint.
+                    boolean meaningful = node.isVisibleToUser()
+                            && (node.getText() != null
+                            || node.getContentDescription() != null);
+                    if (meaningful) {
+                        node.getBoundsInScreen(nodeBounds);
+                        if (!nodeBounds.isEmpty()) {
+                            if (hasContent) {
+                                contentBounds.union(nodeBounds);
+                            } else {
+                                contentBounds.set(nodeBounds);
+                                hasContent = true;
+                            }
+                        }
                     }
+                    for (int index = 0; index < node.getChildCount(); index++) {
+                        AccessibilityNodeInfo child = node.getChild(index);
+                        if (child != null) {
+                            nodes.addLast(child);
+                        }
+                    }
+                } finally {
+                    node.recycle();
                 }
             }
-            for (int index = 0; index < node.getChildCount(); index++) {
-                AccessibilityNodeInfo child = node.getChild(index);
-                if (child != null) {
-                    nodes.addLast(child);
-                }
-            }
+        } finally {
+            recycleNodes(nodes);
         }
         return hasContent
                 ? (contentBounds.width() * (float) contentBounds.height()) / screenArea
                 : 0f;
+    }
+
+    private static void recycleNodes(Deque<AccessibilityNodeInfo> nodes) {
+        while (!nodes.isEmpty()) {
+            nodes.removeFirst().recycle();
+        }
     }
 
     private boolean isFollowing() {

@@ -200,12 +200,13 @@ public final class DanmakuView extends View {
         }
 
         String commands = mail == null ? "" : mail.toLowerCase(Locale.ROOT);
-        Position position = commands.contains("ue")
+        Position position = CommentCommands.has(commands, "ue")
                 ? Position.TOP
-                : commands.contains("shita") ? Position.BOTTOM : Position.SCROLL;
-        float sizeMultiplier = commands.contains("big")
+                : CommentCommands.has(commands, "shita")
+                ? Position.BOTTOM : Position.SCROLL;
+        float sizeMultiplier = CommentCommands.has(commands, "big")
                 ? 1.35f
-                : commands.contains("small") ? 0.75f : 1.0f;
+                : CommentCommands.has(commands, "small") ? 0.75f : 1.0f;
         float textSize = dp(34) * scale * sizeMultiplier;
         int color = parseColor(commands);
         int lane = switch (position) {
@@ -358,15 +359,15 @@ public final class DanmakuView extends View {
     }
 
     private int parseColor(String commands) {
-        if (commands.matches(".*(?:^|\\s)red(?:\\s|$).*")) return Color.RED;
-        if (commands.contains("pink")) return 0xFFFF8080;
-        if (commands.contains("orange")) return 0xFFFFCC00;
-        if (commands.contains("yellow")) return Color.YELLOW;
-        if (commands.contains("green")) return 0xFF00CC66;
-        if (commands.contains("cyan")) return Color.CYAN;
-        if (commands.contains("blue")) return 0xFF3399FF;
-        if (commands.contains("purple")) return 0xFFC080FF;
-        if (commands.contains("black")) return 0xFF444444;
+        if (CommentCommands.has(commands, "red")) return Color.RED;
+        if (CommentCommands.has(commands, "pink")) return 0xFFFF8080;
+        if (CommentCommands.has(commands, "orange")) return 0xFFFFCC00;
+        if (CommentCommands.has(commands, "yellow")) return Color.YELLOW;
+        if (CommentCommands.has(commands, "green")) return 0xFF00CC66;
+        if (CommentCommands.has(commands, "cyan")) return Color.CYAN;
+        if (CommentCommands.has(commands, "blue")) return 0xFF3399FF;
+        if (CommentCommands.has(commands, "purple")) return 0xFFC080FF;
+        if (CommentCommands.has(commands, "black")) return 0xFF444444;
         return Color.WHITE;
     }
 

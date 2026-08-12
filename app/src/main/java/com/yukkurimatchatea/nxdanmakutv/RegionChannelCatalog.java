@@ -51,7 +51,8 @@ public final class RegionChannelCatalog {
                 candidates.addAll(station.aliases());
                 for (String alias : candidates) {
                     String candidate = ChannelCatalog.normalize(alias);
-                    if (candidate.length() > bestLength && normalized.contains(candidate)) {
+                    if (candidate.length() > bestLength
+                            && ChannelCatalog.matchesAlias(visibleText, alias)) {
                         best = station;
                         bestLength = candidate.length();
                     }

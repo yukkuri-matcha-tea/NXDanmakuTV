@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 public final class ChannelCatalog {
     public record Channel(String id, String name, int remoteNumber, List<String> aliases) {}
@@ -88,7 +89,7 @@ public final class ChannelCatalog {
         for (Channel channel : CHANNELS) {
             for (String alias : channel.aliases()) {
                 String candidate = normalize(alias);
-                if (candidate.length() > bestLength && normalized.contains(candidate)) {
+                if (candidate.length() > bestLength && matchesAlias(visibleText, alias)) {
                     best = channel;
                     bestLength = candidate.length();
                 }
@@ -101,8 +102,25 @@ public final class ChannelCatalog {
         if (value == null) {
             return "";
         }
+        return normalizeKeepingSeparators(value).replaceAll("\\s+", "");
+    }
+
+    static boolean matchesAlias(String visibleText, String alias) {
+        String text = normalizeKeepingSeparators(visibleText);
+        String candidate = normalizeKeepingSeparators(alias).trim();
+        if (text.isEmpty() || candidate.isEmpty()) return false;
+        if (candidate.matches("[a-z0-9]{1,3}")) {
+            return Pattern.compile("(?<![a-z0-9])" + Pattern.quote(candidate)
+                            + "(?![a-z0-9])")
+                    .matcher(text)
+                    .find();
+        }
+        return normalize(text).contains(normalize(candidate));
+    }
+
+    private static String normalizeKeepingSeparators(String value) {
+        if (value == null) return "";
         return Normalizer.normalize(value, Normalizer.Form.NFKC)
-                .toLowerCase(Locale.ROOT)
-                .replaceAll("\\s+", "");
+                .toLowerCase(Locale.ROOT);
     }
 }
