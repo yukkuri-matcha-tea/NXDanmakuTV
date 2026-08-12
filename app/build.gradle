@@ -1,7 +1,5 @@
 plugins {
     id "com.android.application"
-    id "org.jetbrains.kotlin.android"
-    id "org.jetbrains.kotlin.plugin.compose"
 }
 
 def signingProperties = new Properties()
@@ -12,14 +10,14 @@ if (signingPropertiesFile.exists()) {
 
 android {
     namespace "com.yukkurimatchatea.nxdanmakutv"
-    compileSdk 36
+    compileSdk 35
 
     defaultConfig {
         applicationId "com.yukkurimatchatea.nxdanmakutv"
         minSdk 26
         targetSdk 35
-        versionCode 18
-        versionName "1.2.0"
+        versionCode 19
+        versionName "1.2.1"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -47,16 +45,6 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
-
-    buildFeatures {
-        compose true
-    }
-}
-
-kotlin {
-    compilerOptions {
-        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
-    }
 }
 
 tasks.register("verifyReleaseSigningConfigured") {
@@ -74,12 +62,5 @@ tasks.matching { it.name == "packageRelease" }.configureEach {
 
 dependencies {
     implementation "com.squareup.okhttp3:okhttp:4.12.0"
-    def composeBom = platform("androidx.compose:compose-bom:2026.06.00")
-    implementation composeBom
-    implementation "androidx.activity:activity-compose:1.13.0"
-    implementation "androidx.compose.foundation:foundation"
-    implementation "androidx.compose.ui:ui-tooling-preview"
-    implementation "androidx.tv:tv-material:1.1.0"
-    debugImplementation "androidx.compose.ui:ui-tooling"
     testImplementation "junit:junit:4.13.2"
 }

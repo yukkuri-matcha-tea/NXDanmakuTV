@@ -4,4 +4,5 @@
     <string name="follow_service_description">地デジの局表示とリモコンのチャンネル操作を検出し、NX-Jikkyoの実況先を自動追従します。入力は監視のみで、テレビへのキー操作は妨げません。</string>
     <string name="notification_channel">実況コメント表示</string>
     <string name="notification_title">NX弾幕TV</string>
+    <string name="auto_update_check">GitHubから更新を自動確認</string>
 </resources>

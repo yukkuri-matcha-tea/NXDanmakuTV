@@ -16,8 +16,6 @@ Android TV / Google TVの地デジ画面上へ、NX-Jikkyoのリアルタイム�
 - 文字サイズ、速度、透明度、密度、表示範囲、縁取り、遅延の調整
 - 表示設定の初期値リセット
 - TVリモコン向けのカード型設定画面
-- Compose for TV / Material 3によるD-pad最適化設定画面
-- 準備・動作・表示・診断へ移動できる設定ジャンプナビ
 - GitHub Releasesを利用した起動時の自動更新確認
 - 更新APKのダウンロード、検証、標準インストーラーへの受け渡し
 
@@ -59,7 +57,7 @@ Accessibility Serviceは、純正TVアプリの局名・局番号OSD、アクテ
 
 ## 開発ビルド
 
-Android StudioのJBRとAndroid SDK 36を使用します。
+Android StudioのJBRとAndroid SDK 35を使用します。
 
 ```powershell
 $env:JAVA_HOME='C:\Program Files\Android\Android Studio\jbr'
