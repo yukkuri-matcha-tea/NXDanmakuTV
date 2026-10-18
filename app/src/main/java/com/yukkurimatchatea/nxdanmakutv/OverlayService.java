@@ -305,7 +305,7 @@ public final class OverlayService extends Service implements NxJikkyoClient.List
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
         return new Notification.Builder(this, NOTIFICATION_CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_launcher)
+                .setSmallIcon(R.drawable.ms_live_tv)
                 .setContentTitle(getString(R.string.notification_title))
                 .setContentText(status)
                 .setContentIntent(activity)

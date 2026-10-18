@@ -15,7 +15,9 @@ Android TV / Google TVの地デジ画面上へ、NX-Jikkyoのリアルタイム�
 - イベントログと接続状態バッジの個別ON/OFF
 - 文字サイズ、速度、透明度、密度、表示範囲、縁取り、遅延の調整
 - 表示設定の初期値リセット
-- TVリモコン向けのカード型設定画面
+- Jetpack Compose Material 3による設定画面（テレビ用レール／狭い画面用ナビゲーション）
+- Material Symbols Rounded、Dynamic Color、ライト／ダーク／端末連動テーマ
+- Adaptive IconとAndroid 13以降のThemed Icon
 - GitHub Releasesを利用した起動時の自動更新確認
 - 更新APKのダウンロード、検証、標準インストーラーへの受け渡し
 
@@ -27,9 +29,9 @@ Android TV / Google TVの地デジ画面上へ、NX-Jikkyoのリアルタイム�
 1. GitHub Releasesから最新のAPKをAndroid TVへ転送します。
 2. TV側で「不明なアプリのインストール」を一時的に許可してAPKを開きます。
 3. NX弾幕TVを起動し、お住まいの都道府県を選択します。
-4. 「オーバーレイ権限」を許可します。
-5. 「自動追従権限」から「NX弾幕TV 自動追従」を有効にします。
-6. 「地デジでコメント表示を開始」を押します。
+4. 「他のアプリの上に表示」を許可します。
+5. 「チャンネル追従サービス」から「NX弾幕TV 自動追従」を有効にします。
+6. 「開始してテレビへ」を押します。
 
 起動時にGitHub Releasesを自動確認します。更新がある場合は画面の案内から
 APKをダウンロードできます。Androidの仕様上、インストールの最終確認は必要です。
@@ -56,6 +58,31 @@ Accessibility Serviceは、純正TVアプリの局名・局番号OSD、アクテ
 「チャンネル診断」の手動ボタンでNX-Jikkyo接続と描画部分を切り分けられます。
 
 ## 開発ビルド
+
+### Material 3 UI
+
+`MaterialSettings.kt` が公式 `androidx.compose.material3` コンポーネントで画面を構築します。
+Javaの `MainActivity` は権限・サービス開始・APK更新の既存処理を担当します。
+地域・自動追従・7種類の表示調整・リセット・手動診断・更新機能は従来の設定キーを使用します。
+
+「設定 → 外観」で端末連動・ライト・ダークを選択できます。Android 12以降はシステムの
+Dynamic Colorを利用し、非対応端末ではMaterial 3の標準配色を使用します。
+Android TVの壁紙色の提供状況はメーカーに依存します。
+横幅720dp以上でNavigationRail、それ未満ではNavigationBarを使用します。
+スライダーに加えて増減ボタンを備え、テレビの十字キーでも数値を変更できます。
+
+公式Symbolsの出典は [THIRD_PARTY_ICONS.md](THIRD_PARTY_ICONS.md) を参照してください。
+Material 3の仕様: https://developer.android.com/develop/ui/compose/designsystems/material3
+
+UI回帰テストは `MaterialSettingsTest` にあります。テスト用端末のアプリ設定を初期化するため、
+普段使いのテレビではなく専用エミュレーターで実行してください。
+
+```powershell
+$env:ANDROID_SERIAL='emulator-5556'
+.\gradlew.bat connectedDebugAndroidTest
+```
+
+初回地域保存、表示調整と初期値へのリセット、テーマ選択、Activity再生成後の状態保持を検証します。
 
 Android StudioのJBRとAndroid SDK 35を使用します。
 
